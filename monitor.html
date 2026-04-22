@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en" class="bg-zinc-950">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gemma 4 · MLX Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
+  <style>
+    .apexcharts-tooltip { background: #18181b !important; border: 1px solid #3f3f46 !important; color: #e4e4e7 !important; }
+    .apexcharts-tooltip-title { background: #27272a !important; border-bottom: 1px solid #3f3f46 !important; }
+  </style>
+</head>
+<body class="text-zinc-100 font-sans antialiased">
+  <div class="max-w-7xl mx-auto p-6">
+    <header class="flex items-center justify-between mb-6 gap-4 flex-wrap">
+      <div class="flex items-center gap-4">
+        <img src="logo.svg" alt="Logo" class="w-12 h-12" />
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">Gemma 4 26B-A4B · MLX Monitor</h1>
+          <p class="text-sm text-zinc-400 mt-1" id="server-line">connecting&hellip;</p>
+          <p class="text-xs text-zinc-500 mt-0.5" id="host-line">&nbsp;</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <button id="pause-btn" class="bg-zinc-900 border border-zinc-800 rounded-md px-3 py-1 hover:bg-zinc-800 transition-colors">Pause</button>
+        <button id="clear-btn" class="bg-zinc-900 border border-zinc-800 rounded-md px-3 py-1 hover:bg-zinc-800 transition-colors" title="Clear stored history">Clear</button>
+        <label class="text-zinc-400" for="interval">Refresh</label>
+        <select id="interval" class="bg-zinc-900 border border-zinc-800 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-600">
+          <option value="500">500 ms</option>
+          <option value="1000">1 s</option>
+          <option value="2000">2 s</option>
+          <option value="5000">5 s</option>
+        </select>
+        <span id="status-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-zinc-600" title="server status"></span>
+      </div>
+    </header>
+
+    <div id="endpoints-strip" class="flex flex-wrap gap-2 mb-4"></div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <div class="flex items-baseline justify-between">
+          <div class="text-xs uppercase tracking-wider text-zinc-400">CPU total</div>
+          <div class="text-xs text-zinc-500"><span id="cpu-cores-label">— cores</span></div>
+        </div>
+        <div class="text-3xl font-semibold mt-1"><span id="cpu-val">—</span><span class="text-base text-zinc-500 ml-1">%</span></div>
+        <div class="text-xs text-zinc-500 mt-0.5">avg <span id="cpu-avg">—</span>% · max <span id="cpu-max">—</span>%</div>
+        <div id="chart-cpu" class="mt-2 -mx-2"></div>
+      </div>
+
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <div class="flex items-baseline justify-between">
+          <div class="text-xs uppercase tracking-wider text-zinc-400">GPU device util</div>
+          <div class="text-xs text-zinc-500"><span id="gpu-cores-label">— cores</span></div>
+        </div>
+        <div class="text-3xl font-semibold mt-1"><span id="gpu-val">—</span><span class="text-base text-zinc-500 ml-1">%</span></div>
+        <div class="text-xs text-zinc-500 mt-0.5">avg <span id="gpu-avg">—</span>% · max <span id="gpu-max">—</span>% · Renderer <span id="gpu-r">—</span>% · Tiler <span id="gpu-t">—</span>%</div>
+        <div id="chart-gpu" class="mt-2 -mx-2"></div>
+      </div>
+
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <div class="flex items-baseline justify-between">
+          <div class="text-xs uppercase tracking-wider text-zinc-400"><span id="mlx-label">MLX</span> process memory</div>
+          <div class="text-xs text-zinc-500">peak <span id="mem-peak">—</span> GB</div>
+        </div>
+        <div class="text-3xl font-semibold mt-1"><span id="mlx-mem">—</span><span class="text-base text-zinc-500 ml-1">GB</span></div>
+        <div class="text-xs text-zinc-500 mt-0.5">PID <span id="mlx-pid">—</span> · CPU <span id="mlx-cpu">—</span>% · window max <span id="mem-max">—</span> GB</div>
+        <div class="text-xs text-zinc-500 mt-0.5 truncate" id="mlx-model-line">&nbsp;</div>
+        <div id="chart-mem" class="mt-2 -mx-2"></div>
+      </div>
+
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <div class="flex items-baseline justify-between">
+          <div class="text-xs uppercase tracking-wider text-zinc-400">GPU memory (AGX)</div>
+          <div class="text-xs text-zinc-500">peak <span id="gpumem-max">—</span> GB</div>
+        </div>
+        <div class="text-3xl font-semibold mt-1"><span id="gpu-mem">—</span><span class="text-base text-zinc-500 ml-1">GB</span></div>
+        <div id="chart-gpumem" class="mt-2 -mx-2"></div>
+      </div>
+
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 md:col-span-2">
+        <div class="flex items-baseline justify-between">
+          <div class="text-xs uppercase tracking-wider text-zinc-400">System memory</div>
+          <div class="text-xs text-zinc-500" id="mem-pct-label">—% used</div>
+        </div>
+        <div class="text-3xl font-semibold mt-1">
+          <span id="sys-used">—</span>
+          <span class="text-zinc-500 text-base font-normal">/</span>
+          <span id="sys-total">—</span><span class="text-base text-zinc-500 ml-1">GB</span>
+        </div>
+        <div class="w-full flex h-2.5 mt-3 rounded-full overflow-hidden bg-zinc-800">
+          <div id="bar-gemma" class="bg-amber-500 transition-all duration-300" style="width:0%" title="Gemma (MLX) process"></div>
+          <div id="bar-other" class="bg-emerald-500 transition-all duration-300" style="width:0%" title="Other processes"></div>
+        </div>
+        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs mt-3">
+          <span class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-sm bg-amber-500"></span>
+            <span class="text-zinc-400" id="legend-active-label">MLX</span>
+            <span class="text-zinc-100 font-medium"><span id="legend-gemma">—</span> GB</span>
+            <span class="text-zinc-500">(<span id="legend-gemma-pct">—</span>%)</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-sm bg-emerald-500"></span>
+            <span class="text-zinc-400">Other</span>
+            <span class="text-zinc-100 font-medium"><span id="legend-other">—</span> GB</span>
+            <span class="text-zinc-500">(<span id="legend-other-pct">—</span>%)</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-sm bg-zinc-700"></span>
+            <span class="text-zinc-400">Free</span>
+            <span class="text-zinc-100 font-medium"><span id="sys-free">—</span> GB</span>
+            <span class="text-zinc-500">(<span id="legend-free-pct">—</span>%)</span>
+          </span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="text-xs text-zinc-600 mt-6 text-center">
+      History persisted in browser localStorage · last 10 min · <span id="points-count">0</span> samples
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const STORAGE_KEY = 'mlx-monitor-v1';
+    const MAX_POINTS = 600; // 10 min at 1 s, 5 min at 500 ms
+    const VIEW_POINTS = 120; // showing last ~2 min at 1 Hz in the charts
+
+    // Restore persisted state
+    const loaded = (() => {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+      catch { return {}; }
+    })();
+    const history = {
+      cpu:    loaded.cpu    || [],
+      gpu:    loaded.gpu    || [],
+      mem:    loaded.mem    || [],
+      gpumem: loaded.gpumem || [],
+    };
+    const settings = {
+      intervalMs: loaded.intervalMs || 1000,
+      paused: false,
+    };
+
+    const $ = id => document.getElementById(id);
+    const fmt = (n, d=1) => (n == null || Number.isNaN(n)) ? '—' : Number(n).toFixed(d);
+
+    function renderEndpointsStrip(endpoints) {
+      const host = $('endpoints-strip');
+      host.innerHTML = '';
+      for (const e of endpoints) {
+        const dot = e.up ? 'bg-emerald-500' : 'bg-zinc-600';
+        const border = e.up ? 'border-emerald-700' : 'border-zinc-800';
+        const model = e.model ? e.model.replace(/^mlx-community\//, '') : '—';
+        const fp = (e.footprint_gb != null) ? fmt(e.footprint_gb, 2) + ' GB' : '—';
+        const pid = e.pid ?? '—';
+        const el = document.createElement('div');
+        el.className = 'bg-zinc-900 border ' + border + ' rounded-lg px-3 py-2 text-xs flex items-center gap-2 min-w-0';
+        el.innerHTML =
+          '<span class="inline-block w-2 h-2 rounded-full ' + dot + '"></span>' +
+          '<span class="font-medium text-zinc-100">' + e.label + '</span>' +
+          '<span class="text-zinc-500">:' + e.port + '</span>' +
+          '<span class="text-zinc-400 truncate max-w-xs" title="' + (e.model || '') + '">' + model + '</span>' +
+          '<span class="text-zinc-500">·</span>' +
+          '<span class="text-zinc-400">pid ' + pid + '</span>' +
+          '<span class="text-zinc-500">·</span>' +
+          '<span class="text-zinc-100">' + fp + '</span>';
+        host.appendChild(el);
+      }
+    }
+
+    $('interval').value = String(settings.intervalMs);
+
+    // Persist throttled
+    let saveTimer = null;
+    function persist() {
+      if (saveTimer) return;
+      saveTimer = setTimeout(() => {
+        saveTimer = null;
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            ...history, intervalMs: settings.intervalMs,
+          }));
+        } catch {}
+      }, 1500);
+    }
+
+    // --- ApexCharts helpers ---
+    function sparkOptions({ id, color, unit, max }) {
+      return {
+        chart: {
+          id, type: 'area', height: 130,
+          sparkline: { enabled: false },
+          animations: { enabled: true, easing: 'linear', dynamicAnimation: { speed: 300 } },
+          toolbar: { show: false }, zoom: { enabled: false },
+          foreColor: '#71717a',
+        },
+        series: [{ name: id, data: [] }],
+        stroke: { curve: 'smooth', width: 2, colors: [color] },
+        fill: {
+          type: 'gradient',
+          gradient: { shade: 'dark', type: 'vertical', opacityFrom: 0.55, opacityTo: 0.05, stops: [0, 100] },
+          colors: [color],
+        },
+        dataLabels: { enabled: false },
+        grid: { borderColor: '#27272a', strokeDashArray: 3, padding: { left: 0, right: 0, top: 0, bottom: 0 } },
+        xaxis: {
+          type: 'datetime',
+          labels: {
+            style: { colors: '#71717a', fontSize: '10px' },
+            datetimeUTC: false,
+            format: 'HH:mm:ss',
+          },
+          axisBorder: { show: false }, axisTicks: { color: '#27272a' },
+          tooltip: { enabled: false },
+        },
+        yaxis: {
+          min: 0, max,
+          labels: {
+            style: { colors: '#71717a', fontSize: '10px' },
+            formatter: v => `${fmt(v, unit === 'GB' ? 1 : 0)} ${unit}`,
+          },
+        },
+        tooltip: {
+          theme: 'dark', shared: false,
+          x: { format: 'HH:mm:ss' },
+          y: { formatter: v => `${fmt(v, unit === 'GB' ? 2 : 1)} ${unit}` },
+        },
+        colors: [color],
+      };
+    }
+
+    const charts = {};
+
+    function hydrate(seriesName) {
+      return history[seriesName].slice(-VIEW_POINTS).map(p => [p.t, p.v]);
+    }
+
+    function renderCharts(sysTotalGB) {
+      charts.cpu = new ApexCharts($('chart-cpu'),
+        { ...sparkOptions({ id: 'cpu', color: '#3b82f6', unit: '%', max: 100 }),
+          series: [{ name: 'CPU', data: hydrate('cpu') }] });
+      charts.gpu = new ApexCharts($('chart-gpu'),
+        { ...sparkOptions({ id: 'gpu', color: '#a855f7', unit: '%', max: 100 }),
+          series: [{ name: 'GPU', data: hydrate('gpu') }] });
+      charts.mem = new ApexCharts($('chart-mem'),
+        { ...sparkOptions({ id: 'mem', color: '#10b981', unit: 'GB', max: sysTotalGB }),
+          series: [{ name: 'MLX RSS', data: hydrate('mem') }] });
+      charts.gpumem = new ApexCharts($('chart-gpumem'),
+        { ...sparkOptions({ id: 'gpumem', color: '#f59e0b', unit: 'GB', max: sysTotalGB }),
+          series: [{ name: 'GPU mem', data: hydrate('gpumem') }] });
+      Object.values(charts).forEach(c => c.render());
+    }
+
+    function pushPoint(seriesName, t, v) {
+      history[seriesName].push({ t, v });
+      if (history[seriesName].length > MAX_POINTS) {
+        history[seriesName].splice(0, history[seriesName].length - MAX_POINTS);
+      }
+    }
+
+    function updateCharts() {
+      charts.cpu.updateSeries([{ name: 'CPU',     data: hydrate('cpu') }]);
+      charts.gpu.updateSeries([{ name: 'GPU',     data: hydrate('gpu') }]);
+      charts.mem.updateSeries([{ name: 'MLX RSS', data: hydrate('mem') }]);
+      charts.gpumem.updateSeries([{ name: 'GPU mem', data: hydrate('gpumem') }]);
+    }
+
+    function computeStats(seriesName) {
+      const vals = history[seriesName].slice(-VIEW_POINTS).map(p => p.v).filter(v => v != null);
+      if (!vals.length) return { avg: null, max: null };
+      const sum = vals.reduce((a, b) => a + b, 0);
+      return { avg: sum / vals.length, max: Math.max(...vals) };
+    }
+
+    async function tick() {
+      if (settings.paused) return;
+      try {
+        const r = await fetch('/stats', { cache: 'no-store' });
+        if (!r.ok) throw new Error(r.status);
+        const s = await r.json();
+        const t = Date.now();
+
+        // Current-value displays
+        const anyUp = (s.endpoints || []).some(e => e.up);
+        $('status-dot').className =
+          'inline-block w-2.5 h-2.5 rounded-full ' + (anyUp ? 'bg-emerald-500' : 'bg-red-500');
+        const activeEp = (s.endpoints || []).find(e => e.name === s.active) || null;
+        const activeLabel = activeEp ? activeEp.label : 'MLX';
+        $('mlx-label').textContent = activeLabel;
+        $('legend-active-label').textContent = activeLabel;
+        $('mlx-model-line').textContent = activeEp && activeEp.model ? activeEp.model : ' ';
+        $('server-line').textContent =
+          (s.server_up ? activeLabel + ' UP' : 'all DOWN') + ' · http://127.0.0.1:' + s.mlx_port +
+          ' · updated ' + new Date(t).toLocaleTimeString();
+        renderEndpointsStrip(s.endpoints || []);
+
+        if (s.host) {
+          $('host-line').textContent =
+            `${s.host.chip} · CPU ${s.host.cpu_cores}c (${s.host.cpu_p_cores}P + ${s.host.cpu_e_cores}E) · GPU ${s.host.gpu_cores ?? '?'}c`;
+          $('cpu-cores-label').textContent =
+            `${s.host.cpu_cores} cores (${s.host.cpu_p_cores}P + ${s.host.cpu_e_cores}E)`;
+          $('gpu-cores-label').textContent =
+            `${s.host.gpu_cores ?? '?'} cores`;
+        }
+
+        $('cpu-val').textContent = fmt(s.cpu_total, 1);
+        $('gpu-val').textContent = s.gpu.device_util ?? '—';
+        $('gpu-r').textContent   = s.gpu.renderer_util ?? '—';
+        $('gpu-t').textContent   = s.gpu.tiler_util ?? '—';
+        const mlxMemGB = s.mlx.footprint_gb ?? s.mlx.rss_gb ?? 0;
+        $('mlx-mem').textContent = fmt(mlxMemGB, 2);
+        $('mlx-pid').textContent = s.mlx.pid ?? '—';
+        $('mlx-cpu').textContent = fmt(s.mlx.cpu, 1);
+        $('gpu-mem').textContent = fmt(s.gpu.mem_used_gb, 2);
+        $('sys-used').textContent  = fmt(s.mem.used_gb, 1);
+        $('sys-free').textContent  = fmt(s.mem.free_gb, 1);
+        $('sys-total').textContent = fmt(s.mem.total_gb, 1);
+        const totalGB = Math.max(s.mem.total_gb, 0.01);
+        const usedPct = s.mem.used_gb / totalGB * 100;
+        $('mem-pct-label').textContent = usedPct.toFixed(0) + '% used';
+
+        const gemmaGB = mlxMemGB;
+        const otherGB = Math.max(0, s.mem.used_gb - gemmaGB);
+        const gemmaPct = gemmaGB / totalGB * 100;
+        const otherPct = otherGB / totalGB * 100;
+        const freePct  = Math.max(0, 100 - gemmaPct - otherPct);
+        $('bar-gemma').style.width = gemmaPct.toFixed(2) + '%';
+        $('bar-other').style.width = otherPct.toFixed(2) + '%';
+        $('legend-gemma').textContent = fmt(gemmaGB, 2);
+        $('legend-other').textContent = fmt(otherGB, 2);
+        $('legend-gemma-pct').textContent = gemmaPct.toFixed(1);
+        $('legend-other-pct').textContent = otherPct.toFixed(1);
+        $('legend-free-pct').textContent  = freePct.toFixed(1);
+
+        // Push + store
+        pushPoint('cpu', t, s.cpu_total);
+        pushPoint('gpu', t, s.gpu.device_util ?? 0);
+        pushPoint('mem', t, mlxMemGB);
+        pushPoint('gpumem', t, s.gpu.mem_used_gb ?? 0);
+
+        // Update y-max for memory charts if total changed
+        charts.mem.updateOptions({ yaxis: { min: 0, max: s.mem.total_gb,
+          labels: { style: { colors: '#71717a', fontSize: '10px' }, formatter: v => `${fmt(v, 1)} GB` } } }, false, false);
+        charts.gpumem.updateOptions({ yaxis: { min: 0, max: s.mem.total_gb,
+          labels: { style: { colors: '#71717a', fontSize: '10px' }, formatter: v => `${fmt(v, 1)} GB` } } }, false, false);
+
+        updateCharts();
+
+        // Rolling min/avg/max in window
+        const cpuS = computeStats('cpu');
+        const gpuS = computeStats('gpu');
+        const memS = computeStats('mem');
+        const gpumemS = computeStats('gpumem');
+        $('cpu-avg').textContent = fmt(cpuS.avg, 1);
+        $('cpu-max').textContent = fmt(cpuS.max, 1);
+        $('gpu-avg').textContent = fmt(gpuS.avg, 0);
+        $('gpu-max').textContent = fmt(gpuS.max, 0);
+        $('mem-max').textContent = fmt(memS.max, 2);
+        $('mem-peak').textContent = fmt(s.mlx.footprint_peak_gb ?? memS.max, 2);
+        $('gpumem-max').textContent = fmt(gpumemS.max, 2);
+        $('points-count').textContent = history.cpu.length;
+
+        persist();
+      } catch (e) {
+        $('status-dot').className = 'inline-block w-2.5 h-2.5 rounded-full bg-red-500';
+        $('server-line').textContent = 'monitor backend unreachable';
+      }
+    }
+
+    let timer = null;
+    function schedule() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(tick, settings.intervalMs);
+    }
+
+    $('interval').addEventListener('change', () => {
+      settings.intervalMs = parseInt($('interval').value, 10);
+      persist();
+      schedule();
+    });
+    $('pause-btn').addEventListener('click', () => {
+      settings.paused = !settings.paused;
+      $('pause-btn').textContent = settings.paused ? 'Resume' : 'Pause';
+      $('pause-btn').classList.toggle('bg-amber-900', settings.paused);
+      $('pause-btn').classList.toggle('border-amber-800', settings.paused);
+    });
+    $('clear-btn').addEventListener('click', () => {
+      if (!confirm('Clear stored history?')) return;
+      for (const k of Object.keys(history)) history[k] = [];
+      persist();
+      updateCharts();
+      $('points-count').textContent = '0';
+    });
+
+    // First fetch to know total mem, then render charts
+    (async () => {
+      let sysTotalGB = 32;
+      try {
+        const r = await fetch('/stats');
+        const s = await r.json();
+        sysTotalGB = s.mem.total_gb || 32;
+      } catch {}
+      renderCharts(sysTotalGB);
+      tick();
+      schedule();
+    })();
+  })();
+  </script>
+</body>
+</html>

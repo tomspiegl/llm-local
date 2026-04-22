@@ -1,0 +1,13 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="240" fill="#1a1a1a" />
+  
+  <!-- Hexagon Shape (Representing a Chip/Structure) -->
+  <path d="M256 60 L415 158 V354 L256 452 L97 354 V158 Z" fill="none" stroke="#007AFF" stroke-width="12" stroke-linejoin="round" />
+  
+  <!-- Pulse Line (Representing Live Metrics) -->
+  <path d="M100 256 L180 256 L210 180 L260 330 L300 256 L412 256" fill="none" stroke="#00F2FF" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Data Point (Representing the 'Live' aspect) -->
+  <circle cx="412" cy="256" r="12" fill="#00F2FF" />
+</svg>
