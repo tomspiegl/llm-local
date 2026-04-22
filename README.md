@@ -11,6 +11,8 @@ Two models are wired up out of the box:
 
 Each server speaks the OpenAI API at `http://127.0.0.1:<port>/v1`, so any OpenAI-compatible client works.
 
+![Monitor dashboard](assets/monitor.png)
+
 ## Requirements
 
 - Apple Silicon Mac (arm64) — MLX does not run on Intel.
